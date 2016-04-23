@@ -32,6 +32,7 @@ from inspect import isclass
 from operator import eq, lt
 
 import tools        # Needed by HARM-GP
+import inspect
 
 ######################################
 # GP Data structure                  #
@@ -181,6 +182,10 @@ class PrimitiveTree(list):
         return slice(begin, end)
 
 
+def isalambda(v):
+  LAMBDA = lambda:0
+  return isinstance(v, type(LAMBDA)) and v.__name__ == LAMBDA.__name__
+
 class Primitive(object):
     """Class that encapsulates a primitive and when called with arguments it
     returns the Python code to call the primitive with the arguments.
@@ -276,6 +281,9 @@ class PrimitiveSetTyped(object):
         for i, type_ in enumerate(in_types):
             arg_str = "{prefix}{index}".format(prefix=prefix, index=i)
             self.arguments.append(arg_str)
+            # prim = Primitive(arg_str, [], type_)
+            # self._add(prim)
+            # self.prims_count += 1
             term = Terminal(arg_str, True, type_)
             self._add(term)
             self.terms_count += 1
@@ -293,30 +301,34 @@ class PrimitiveSetTyped(object):
 
     def _add(self, prim):
         def addType(dict_, ret_type):
-            if not ret_type in dict_:
+            if ret_type not in dict_:
                 new_list = []
                 for type_, list_ in dict_.items():
                     if issubclass(type_, ret_type):
                         for item in list_:
-                            if not item in new_list:
+                            if item not in new_list:
                                 new_list.append(item)
                 dict_[ret_type] = new_list
 
-        addType(self.primitives, prim.ret)
-        addType(self.terminals, prim.ret)
+        def add2dict(dict_, prm):
+            for t in dict_:
+                if issubclass(prm.ret, t):
+                    dict_[t].append(prm)
 
         self.mapping[prim.name] = prim
+
+        if isalambda(prim.ret) == False and inspect.isclass(prim.ret):
+            addType(self.primitives, prim.ret)
+            addType(self.terminals, prim.ret)
+
         if isinstance(prim, Primitive):
             for type_ in prim.args:
-                addType(self.primitives, type_)
-                addType(self.terminals, type_)
-            dict_ = self.primitives
+                if not isinstance(type_, basestring):
+                    addType(self.primitives, type_)
+                    addType(self.terminals, type_)
+            add2dict(self.primitives, prim)
         else:
-            dict_ = self.terminals
-
-        for type_ in dict_:
-            if issubclass(prim.ret, type_):
-                dict_[type_].append(prim)
+            add2dict(self.terminals, prim)
 
     def addPrimitive(self, primitive, in_types, ret_type, name=None):
         """Add a primitive to the set.
@@ -465,6 +477,7 @@ def compile(expr, pset):
               or return the results produced by evaluating the tree.
     """
     code = str(expr)
+    print(code)
     if len(pset.arguments) > 0:
         # This section is a stripped version of the lambdify
         # function of SymPy 0.6.6.
@@ -600,7 +613,15 @@ def generate(pset, min_, max_, condition, type_=None):
     stack = [(0, type_)]
     while len(stack) != 0:
         depth, type_ = stack.pop()
-        if condition(height, depth):
+        if isinstance(type_, basestring):
+            term = pset.mapping[type_]
+            if isclass(term):
+                term = term()
+            expr.append(term)
+            if issubclass(type(term), Primitive):
+                for arg in reversed(term.args):
+                    stack.append((depth + 1, arg))
+        elif condition(height, depth):
             try:
                 term = random.choice(pset.terminals[type_])
             except IndexError:
@@ -614,14 +635,20 @@ def generate(pset, min_, max_, condition, type_=None):
         else:
             try:
                 prim = random.choice(pset.primitives[type_])
+                expr.append(prim)
+                for arg in reversed(prim.args):
+                    stack.append((depth + 1, arg))
             except IndexError:
-                _, _, traceback = sys.exc_info()
-                raise IndexError, "The gp.generate function tried to add "\
-                                  "a primitive of type '%s', but there is "\
-                                  "none available." % (type_,), traceback
-            expr.append(prim)
-            for arg in reversed(prim.args):
-                stack.append((depth + 1, arg))
+                try:
+                    term = random.choice(pset.terminals[type_])
+                except IndexError:
+                    _, _, traceback = sys.exc_info()
+                    raise IndexError, "The gp.generate function tried to add " \
+                                      "a primitive and  a terminal of type '%s', but there is " \
+                                      "none available." % (type_,), traceback
+                if isclass(term):
+                    term = term()
+                expr.append(term)
     return expr
 
 
