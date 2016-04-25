@@ -11,7 +11,7 @@ from copy import deepcopy
 from functools import partial
 from itertools import chain
 from operator import eq
-
+import operator
 
 def identity(obj):
     """Returns directly the argument *obj*.
@@ -521,20 +521,29 @@ class HallOfFame(object):
             # Working on an empty hall of fame is problematic for the
             # "for else"
             self.insert(population[0])
-        
-        for ind in population:
+
+        def get_key(indval): return indval.fitness
+        for ind in sorted([x for x in population], key=get_key, reverse=True)[:self.maxsize]:
+            self.insert(ind)
+
+        sorted_x = sorted(self.items, key=operator.itemgetter(0), reverse=True)[:self.maxsize]
+        self.clear()
+        for ind in sorted_x:
+            self.insert(ind)
+
+        '''for ind in population:
             if ind.fitness > self[-1].fitness or len(self) < self.maxsize:
                 for hofer in self:
                     # Loop through the hall of fame to check for any
                     # similar individual
                     if self.similar(ind, hofer):
                         break
-                else:
-                    # The individual is unique and strictly better than
-                    # the worst
-                    if len(self) >= self.maxsize:
-                        self.remove(-1)
-                    self.insert(ind)
+                    else:
+                        # The individual is unique and strictly better than
+                        # the worst
+                        if len(self) >= self.maxsize:
+                            self.remove(-1)
+                        self.insert(ind)'''
     
     def insert(self, item):
         """Insert a new individual in the hall of fame using the
