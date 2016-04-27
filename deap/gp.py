@@ -400,7 +400,9 @@ class PrimitiveSetTyped(object):
         module_gp = globals()
         if not name in module_gp:
             class_ = type(name, (Ephemeral,), {'func': staticmethod(ephemeral),
-                                               'ret': ret_type})
+                                               'ret': ret_type,
+                                               'name': name
+                                               })
             module_gp[name] = class_
         else:
             class_ = module_gp[name]
@@ -477,7 +479,7 @@ def compile(expr, pset):
               or return the results produced by evaluating the tree.
     """
     code = str(expr)
-    print(code)
+    # print(code)
     if len(pset.arguments) > 0:
         # This section is a stripped version of the lambdify
         # function of SymPy 0.6.6.
